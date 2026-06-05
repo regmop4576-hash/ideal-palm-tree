@@ -2,39 +2,527 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TEST</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Roleplay_LEGO</title>
+    <!-- Консоль для отладки на телефоне -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
     <style>
-        body { 
-            background: #000; 
-            color: #fff; 
-            font-family: sans-serif;
-            padding: 20px;
+        :root {
+            --bg-color: #000000;
+            --nav-bg: #111111;
+            --surface-bg: #1a1a1a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #aaaaaa;
+            --accent-blue: #00e5ff;
+            --accent-purple: #b388ff;
+            --msg-user: #0d2a4a;
+            --msg-bot: #1e1e1e;
+            --msg-whisper: rgba(44, 26, 77, 0.7);
+            --action-color: #bb86fc;
+            --danger: #ff5252;
+            --radius: 16px;
         }
-        .btn {
-            background: #00e5ff;
-            color: #000;
-            border: none;
-            padding: 15px 30px;
-            margin: 10px;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
+
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            position: fixed; /* Прибиваем страницу намертво к экрану телефона */
+            top: 0; left: 0;
+            overflow: hidden; /* Отключаем системный скролл браузера */
+            background-color: var(--bg-color); 
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+            overscroll-behavior-y: none;
         }
+
+        #app { 
+            display: flex; 
+            flex-direction: column; 
+            position: absolute; /* Жесткие рамки под размер дисплея */
+            top: 0; bottom: 0; left: 0; right: 0;
+        }
+        
+        .view-container { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+        .view-container.active { display: flex; }
+
+        #nav-bar {
+            flex-shrink: 0; height: 60px; background-color: var(--nav-bg); display: flex; justify-content: space-around;
+            align-items: center; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); z-index: 100;
+        }
+        .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+        .nav-item .icon { font-size: 20px; margin-bottom: 2px; }
+        .nav-item.active { color: var(--accent-blue); }
+        .nav-item.active .icon { color: var(--accent-blue); }
+
+        .header { height: 50px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: var(--nav-bg); border-bottom: 1px solid #333; font-weight: bold; }
+
+        /* Включаем плавную мобильную прокрутку для списков */
+        #chat-messages { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 16px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 16px; 
+            -webkit-overflow-scrolling: touch; 
+        }
+        
+        .message-wrapper { display: flex; flex-direction: column; max-width: 85%; }
+        .message-wrapper.user { align-self: flex-end; }
+        .message-wrapper.assistant { align-self: flex-start; }
+        .message-wrapper.system { align-self: flex-end; }
+        
+        .message { padding: 12px 16px; border-radius: var(--radius); font-size: 15px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; }
+        .user .message { background-color: var(--msg-user); border-bottom-right-radius: 4px; }
+        .assistant .message { background-color: var(--msg-bot); border-bottom-left-radius: 4px; }
+        .system .message { background-color: var(--msg-whisper); border: 1px dashed var(--accent-purple); border-bottom-right-radius: 4px; }
+        .action { color: var(--action-color); font-style: italic; }
+        
+        .msg-actions { display: flex; gap: 12px; margin-top: 4px; font-size: 12px; color: var(--text-secondary); padding: 0 4px; }
+        .user .msg-actions, .system .msg-actions { justify-content: flex-end; }
+        .msg-action-btn { cursor: pointer; padding: 4px 0; }
+        .msg-action-btn.del-btn { color: var(--danger); }
+
+        .input-area { flex-shrink: 0; background: var(--nav-bg); padding: 10px 16px; border-top: 1px solid #333; display: flex; align-items: flex-end; gap: 10px; }
+        .whisper-toggle { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; font-size: 20px; background: var(--surface-bg); border-radius: 50%; cursor: pointer; }
+        .whisper-toggle.active { background: var(--accent-purple); }
+        
+        #chat-input { flex: 1; background: var(--surface-bg); color: var(--text-primary); border: 1px solid #333; border-radius: 20px; padding: 12px 16px; font-size: 15px; resize: none; min-height: 44px; max-height: 30vh; overflow-y: auto; font-family: inherit; }
+        #chat-input:focus { border-color: var(--accent-blue); }
+        .send-btn { background: var(--accent-blue); color: #000; border: none; border-radius: 50%; min-height: 44px; min-width: 44px; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+        .list-container { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 16px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px; 
+            -webkit-overflow-scrolling: touch; 
+        }
+        
+        .list-item { background: var(--surface-bg); padding: 16px; border-radius: 12px; border: 1px solid #333; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+        .list-item.active-item { border-color: var(--accent-blue); box-shadow: 0 0 8px rgba(0, 229, 255, 0.2); }
+        .item-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; align-items: center; }
+        .item-desc { font-size: 14px; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .item-actions { display: flex; gap: 16px; margin-top: 4px; justify-content: flex-end; }
+        .item-btn { font-size: 14px; color: var(--accent-blue); padding: 4px; }
+        .item-btn.del { color: var(--danger); }
+
+        .fab { position: absolute; bottom: 80px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: var(--accent-blue); color: #000; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(0, 229, 255, 0.4); cursor: pointer; z-index: 150; }
+
+        .form-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        label { font-size: 14px; color: var(--text-secondary); }
+        input, textarea.form-input { background: var(--bg-color); border: 1px solid #333; color: var(--text-primary); padding: 12px; border-radius: 8px; font-size: 16px; font-family: inherit; width: 100%; }
+        input:focus, textarea.form-input:focus { border-color: var(--accent-blue); }
+        .btn-primary { background: var(--accent-blue); color: #000; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: none; justify-content: center; align-items: flex-end; z-index: 9999; backdrop-filter: blur(4px); }
+        .modal-overlay.active { display: flex; }
+        
+        .modal-content { 
+            background: var(--surface-bg); 
+            width: 100%; 
+            max-height: 90vh; 
+            border-top-left-radius: 20px; 
+            border-top-right-radius: 20px; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            overflow-y: auto; 
+            animation: slideUp 0.3s ease-out; 
+            -webkit-overflow-scrolling: touch; 
+        }
+        
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-size: 18px; font-weight: bold; }
+        .close-modal { font-size: 24px; color: var(--text-secondary); cursor: pointer; padding: 8px; }
+        #loader { font-size: 14px; color: var(--accent-blue); display: none; }
     </style>
 </head>
 <body>
-    <h1>ТЕСТ</h1>
-    <p>Если кнопки нажимаются — JavaScript работает!</p>
-    <button class="btn" onclick="alert('РАБОТАЕТ!')">Нажми меня</button>
-    <button class="btn" id="testBtn">Или эту</button>
+
+<div id="app">
+    <!-- Chat View -->
+    <div id="view-chat" class="view-container active">
+        <div class="header">
+            <div id="chat-header-title">Чат</div>
+            <div id="loader">Печатает...</div>
+        </div>
+        <div id="chat-messages"></div>
+        <div class="input-area">
+            <div id="btn-whisper" class="whisper-toggle">🤫</div>
+            <textarea id="chat-input" placeholder="Сообщение..." rows="1"></textarea>
+            <button class="send-btn" id="btn-send">➤</button>
+        </div>
+    </div>
+
+    <!-- Characters View -->
+    <div id="view-chars" class="view-container">
+        <div class="header">NPC (Персонажи)</div>
+        <div class="list-container" id="list-chars"></div>
+        <div class="fab" onclick="window.openModal('tpl-form-char')">➕</div>
+    </div>
+
+    <!-- Personas View -->
+    <div id="view-personas" class="view-container">
+        <div class="header">Мои Персоны</div>
+        <div class="list-container" id="list-personas"></div>
+        <div class="fab" onclick="window.openModal('tpl-form-persona')">➕</div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="view-settings" class="view-container">
+        <div class="header">Настройки API</div>
+        <div class="list-container">
+            <div class="form-group"><label>OpenRouter API Key</label><input type="password" id="api-key" placeholder="sk-or-v1-..."></div>
+            <div class="form-group"><label>Model</label><input type="text" id="api-model" placeholder="google/gemma-7b-it:free"></div>
+            <div class="form-group"><label>Temperature</label><input type="number" id="api-temp" step="0.1" min="0.1" max="2.0"></div>
+            <div class="form-group"><label>Repetition Penalty</label><input type="number" id="api-rep" step="0.1" min="1.0" max="2.0"></div>
+            <div class="form-group"><label>Global Prompt (System)</label><textarea class="form-input" id="api-global" rows="4"></textarea></div>
+            <button class="btn-primary" onclick="window.saveSettings()">Сохранить настройки</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div id="nav-bar">
+        <div class="nav-item active" data-view="view-chat"><div class="icon">💬</div><span>Чат</span></div>
+        <div class="nav-item" data-view="view-chars"><div class="icon">🎭</div><span>NPC</span></div>
+        <div class="nav-item" data-view="view-personas"><div class="icon">👤</div><span>Персоны</span></div>
+        <div class="nav-item" data-view="view-settings"><div class="icon">⚙️</div><span>Настройки</span></div>
+    </div>
+</div>
+
+<!-- Modal Container -->
+<div id="modal-container" class="modal-overlay">
+    <div class="modal-content" id="modal-content"></div>
+</div>
+
+<!-- Modal Templates -->
+<template id="tpl-form-char">
+    <div class="modal-header"><span id="modal-char-title">Создать NPC</span><span class="close-modal" onclick="window.closeModal()">✕</span></div>
+    <div class="form-group"><label>Имя персонажа</label><input type="text" id="inp-char-name"></div>
+    <div class="form-group"><label>Промпт (Инструкции и характер)</label><textarea class="form-input" id="inp-char-prompt" rows="6"></textarea></div>
+    <button class="btn-primary" id="btn-save-char">Сохранить</button>
+</template>
+
+<template id="tpl-form-persona">
+    <div class="modal-header"><span id="modal-persona-title">Создать Персону</span><span class="close-modal" onclick="window.closeModal()">✕</span></div>
+    <div class="form-group"><label>Имя</label><input type="text" id="inp-persona-name"></div>
+    <div class="form-group"><label>Лор (Описание)</label><textarea class="form-input" id="inp-persona-lore" rows="6"></textarea></div>
+    <button class="btn-primary" id="btn-save-persona">Сохранить</button>
+</template>
+
+<template id="tpl-edit-msg">
+    <div class="modal-header"><span>Редактировать сообщение</span><span class="close-modal" onclick="window.closeModal()">✕</span></div>
+    <div class="form-group"><textarea class="form-input" id="inp-edit-msg" rows="8"></textarea></div>
+    <button class="btn-primary" id="btn-save-msg">Сохранить</button>
+</template>
+
+<script>
+    const STORAGE_KEY = 'roleplay_lego_v4';
     
-    <script>
-        console.log('Script loaded!');
-        
-        document.getElementById('testBtn').addEventListener('click', function() {
-            alert('Вторая кнопка тоже работает!');
+    const DEMO_DATA = {
+        globalSettings: {
+            key: "", model: "google/gemma-7b-it:free", temperature: 0.9, repetitionPenalty: 1.1,
+            globalPrompt: "Ты - продвинутая ИИ-модель для текстового ролевого отыгрыша (Roleplay). Никогда не нарушай четвёртую стену. Вживайся в свою роль и пиши атмосферный отыгрыш."
+        },
+        personas: [
+            { id: 1, name: "Каирана", lore: "Девушка с магией пламени и фейерверков. Любит свободу, громкие звуки и искры." }
+        ],
+        characters: [
+            { id: 1, name: "Эмбер", prompt: "Ты Эмбер. Уверенная, хитрая и заботливая. У тебя крылья и хвост с сердцевидным кончиком (bat-cat). Ты никогда не бываешь робкой или покорной. У тебя озорной и дерзкий характер." }
+        ],
+        chats: {
+            "1": [
+                { role: "assistant", content: "*Взмахивает крыльями и зависает в воздухе, подмигивая* Ну наконец-то! Я уж думала, ты решил проспать все самое интересное!" }
+            ]
+        },
+        state: { activeCharId: 1, activePersonaId: 1 }
+    };
+
+    window.appData = {};
+    let isWhisperActive = false;
+
+    function initData() {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            window.appData = stored ? JSON.parse(stored) : JSON.parse(JSON.stringify(DEMO_DATA));
+        } catch (e) {
+            console.error("Storage error, using memory", e);
+            window.appData = JSON.parse(JSON.stringify(DEMO_DATA));
+        }
+    }
+
+    window.saveData = function() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(window.appData)); } catch (e) { console.error("Save error", e); }
+    };
+
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
+    }
+
+    function parseMarkdown(text) {
+        return escapeHTML(text).replace(/\*(.*?)\*/g, '<span class="action">*$1*</span>');
+    }
+
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', function() {
+            document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            const viewId = this.getAttribute('data-view');
+            document.getElementById(viewId).classList.add('active');
+            this.classList.add('active');
+
+            if (viewId === 'view-chat') renderChat();
+            if (viewId === 'view-chars') renderChars();
+            if (viewId === 'view-personas') renderPersonas();
+            if (viewId === 'view-settings') renderSettings();
         });
-    </script>
+    });
+
+    // Modals
+    window.openModal = function(templateId, options = {}) {
+        const temp = document.getElementById(templateId);
+        document.getElementById('modal-content').innerHTML = '';
+        document.getElementById('modal-content').appendChild(temp.content.cloneNode(true));
+        document.getElementById('modal-container').classList.add('active');
+
+        if(templateId === 'tpl-form-char') {
+            if(options.id) {
+                const char = window.appData.characters.find(c => c.id === options.id);
+                document.getElementById('modal-char-title').innerText = "Редактировать NPC";
+                document.getElementById('inp-char-name').value = char.name;
+                document.getElementById('inp-char-prompt').value = char.prompt;
+            }
+            document.getElementById('btn-save-char').onclick = () => saveCharForm(options.id);
+        }
+        if(templateId === 'tpl-form-persona') {
+            if(options.id) {
+                const pers = window.appData.personas.find(p => p.id === options.id);
+                document.getElementById('modal-persona-title').innerText = "Редактировать Персону";
+                document.getElementById('inp-persona-name').value = pers.name;
+                document.getElementById('inp-persona-lore').value = pers.lore;
+            }
+            document.getElementById('btn-save-persona').onclick = () => savePersonaForm(options.id);
+        }
+        if(templateId === 'tpl-edit-msg') {
+            const chatList = window.appData.chats[window.appData.state.activeCharId];
+            document.getElementById('inp-edit-msg').value = chatList[options.index].content;
+            document.getElementById('btn-save-msg').onclick = () => {
+                chatList[options.index].content = document.getElementById('inp-edit-msg').value;
+                window.saveData(); window.closeModal(); renderChat();
+            };
+        }
+    };
+
+    window.closeModal = function() { document.getElementById('modal-container').classList.remove('active'); };
+
+    // Chat
+    function renderChat() {
+        const container = document.getElementById('chat-messages');
+        container.innerHTML = '';
+        const char = window.appData.characters.find(c => c.id === window.appData.state.activeCharId);
+        
+        if(!char) { container.innerHTML = '<div style="text-align:center; padding:20px;">Выберите NPC</div>'; return; }
+        document.getElementById('chat-header-title').innerText = `Чат: ${char.name}`;
+        
+        const history = window.appData.chats[char.id] || [];
+        history.forEach((msg, index) => {
+            const wrap = document.createElement('div');
+            wrap.className = `message-wrapper ${msg.role}`;
+            wrap.innerHTML = `
+                <div class="message">${parseMarkdown(msg.content)}</div>
+                <div class="msg-actions">
+                    <span class="msg-action-btn" onclick="window.openModal('tpl-edit-msg', {index: ${index}})">Изменить</span>
+                    <span class="msg-action-btn del-btn" onclick="window.deleteMessage(${index})">Удалить</span>
+                </div>`;
+            container.appendChild(wrap);
+        });
+        container.scrollTop = container.scrollHeight;
+    }
+
+    window.deleteMessage = function(index) {
+        window.appData.chats[window.appData.state.activeCharId].splice(index, 1);
+        window.saveData(); renderChat();
+    };
+
+    // Characters
+    function renderChars() {
+        const container = document.getElementById('list-chars');
+        container.innerHTML = '';
+        window.appData.characters.forEach(char => {
+            const div = document.createElement('div');
+            div.className = `list-item ${char.id === window.appData.state.activeCharId ? 'active-item' : ''}`;
+            div.onclick = (e) => {
+                if(e.target.classList.contains('item-btn')) return;
+                window.appData.state.activeCharId = char.id; window.saveData(); renderChars();
+            };
+            div.innerHTML = `
+                <div class="item-header"><span>${escapeHTML(char.name)}</span></div>
+                <div class="item-desc">${escapeHTML(char.prompt)}</div>
+                <div class="item-actions">
+                    <span class="item-btn" onclick="window.openModal('tpl-form-char', {id: ${char.id}})">Изменить</span>
+                    <span class="item-btn del" onclick="window.deleteChar(${char.id})">Удалить</span>
+                </div>`;
+            container.appendChild(div);
+        });
+    }
+
+    window.deleteChar = function(id) {
+        window.appData.characters = window.appData.characters.filter(c => c.id !== id);
+        delete window.appData.chats[id];
+        if(window.appData.state.activeCharId === id) window.appData.state.activeCharId = window.appData.characters[0]?.id || null;
+        window.saveData(); renderChars();
+    };
+
+    function saveCharForm(id) {
+        const name = document.getElementById('inp-char-name').value.trim();
+        const prompt = document.getElementById('inp-char-prompt').value.trim();
+        if(!name) return alert('Введите имя');
+        
+        if(id) {
+            const c = window.appData.characters.find(c => c.id === id);
+            if(c) { c.name = name; c.prompt = prompt; }
+        } else {
+            const newId = Date.now();
+            window.appData.characters.push({ id: newId, name, prompt });
+            window.appData.chats[newId] = [{ role: "assistant", content: `Привет! Я ${name}.` }];
+            window.appData.state.activeCharId = newId;
+        }
+        window.saveData(); window.closeModal(); renderChars();
+    }
+
+    // Personas
+    function renderPersonas() {
+        const container = document.getElementById('list-personas');
+        container.innerHTML = '';
+        window.appData.personas.forEach(pers => {
+            const div = document.createElement('div');
+            div.className = `list-item ${pers.id === window.appData.state.activePersonaId ? 'active-item' : ''}`;
+            div.onclick = (e) => {
+                if(e.target.classList.contains('item-btn')) return;
+                window.appData.state.activePersonaId = pers.id; window.saveData(); renderPersonas();
+            };
+            div.innerHTML = `
+                <div class="item-header"><span>${escapeHTML(pers.name)}</span></div>
+                <div class="item-desc">${escapeHTML(pers.lore)}</div>
+                <div class="item-actions">
+                    <span class="item-btn" onclick="window.openModal('tpl-form-persona', {id: ${pers.id}})">Изменить</span>
+                    <span class="item-btn del" onclick="window.deletePersona(${pers.id})">Удалить</span>
+                </div>`;
+            container.appendChild(div);
+        });
+    }
+
+    window.deletePersona = function(id) {
+        window.appData.personas = window.appData.personas.filter(p => p.id !== id);
+        if(window.appData.state.activePersonaId === id) window.appData.state.activePersonaId = window.appData.personas[0]?.id || null;
+        window.saveData(); renderPersonas();
+    };
+
+    function savePersonaForm(id) {
+        const name = document.getElementById('inp-persona-name').value.trim();
+        const lore = document.getElementById('inp-persona-lore').value.trim();
+        if(!name) return alert('Введите имя');
+
+        if(id) {
+            const p = window.appData.personas.find(p => p.id === id);
+            if(p) { p.name = name; p.lore = lore; }
+        } else {
+            const newId = Date.now();
+            window.appData.personas.push({ id: newId, name, lore });
+            window.appData.state.activePersonaId = newId;
+        }
+        window.saveData(); window.closeModal(); renderPersonas();
+    }
+
+    // Settings
+    function renderSettings() {
+        const s = window.appData.globalSettings;
+        document.getElementById('api-key').value = s.key || '';
+        document.getElementById('api-model').value = s.model || '';
+        document.getElementById('api-temp').value = s.temperature || 0.9;
+        document.getElementById('api-rep').value = s.repetitionPenalty || 1.1;
+        document.getElementById('api-global').value = s.globalPrompt || '';
+    }
+
+    window.saveSettings = function() {
+        window.appData.globalSettings = {
+            key: document.getElementById('api-key').value.trim(),
+            model: document.getElementById('api-model').value.trim() || 'google/gemma-7b-it:free',
+            temperature: parseFloat(document.getElementById('api-temp').value) || 0.9,
+            repetitionPenalty: parseFloat(document.getElementById('api-rep').value) || 1.1,
+            globalPrompt: document.getElementById('api-global').value.trim()
+        };
+        window.saveData(); alert('Настройки сохранены!');
+    };
+
+    // API Call
+    document.getElementById('btn-send').onclick = async () => {
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if(!text) return;
+
+        const s = window.appData.globalSettings;
+        if(!s.key) { alert('Введите API ключ в настройках!'); document.querySelector('[data-view="view-settings"]').click(); return; }
+
+        const charId = window.appData.state.activeCharId;
+        const char = window.appData.characters.find(c => c.id === charId);
+        const pers = window.appData.personas.find(p => p.id === window.appData.state.activePersonaId);
+
+        if(!window.appData.chats[charId]) window.appData.chats[charId] = [];
+        
+        window.appData.chats[charId].push({ role: isWhisperActive ? 'system' : 'user', content: text });
+        input.value = ''; input.style.height = 'auto'; renderChat();
+
+        const sysText = `${s.globalPrompt}
+
+[Игрок]: ${pers ? pers.lore : ''}
+
+[Твой персонаж]: ${char ? char.prompt : ''}`;
+        const reqMsg = [{ role: "system", content: sysText }, ...window.appData.chats[charId]];
+
+        document.getElementById('loader').style.display = 'block';
+
+        try {
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${s.key}`, 'HTTP-Referer': 'https://localhost', 'X-Title': 'LEGO', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: s.model, messages: reqMsg, temperature: s.temperature, repetition_penalty: s.repetitionPenalty })
+            });
+            const data = await res.json();
+            document.getElementById('loader').style.display = 'none';
+
+            if(data.choices && data.choices[0]) {
+                window.appData.chats[charId].push({ role: 'assistant', content: data.choices[0].message.content });
+                window.saveData(); renderChat();
+            } else {
+                alert(`Ошибка API: ${data.error?.message || 'Неизвестная ошибка'}`);
+            }
+        } catch (e) {
+            document.getElementById('loader').style.display = 'none'; alert(`Ошибка сети: ${e.message}`);
+        }
+    };
+
+    document.getElementById('btn-whisper').onclick = function() {
+        isWhisperActive = !isWhisperActive;
+        this.classList.toggle('active', isWhisperActive);
+    };
+
+    document.getElementById('chat-input').addEventListener('input', function() {
+        this.style.height = 'auto'; this.style.height = this.scrollHeight + 'px';
+    });
+
+    // Start
+    initData();
+    renderChat();
+</script>
 </body>
 </html>
